@@ -46,7 +46,6 @@ def crawl_filtered_pages(home_url, selected_category, max_pages=300):
 
         links = get_internal_links(url)
 
-        # Save the page if it matches selected category (or is All Pages)
         if selected_category == "All Pages" or (
             isinstance(match_keywords, list) and any(kw in url for kw in match_keywords)
         ) or (
@@ -54,7 +53,6 @@ def crawl_filtered_pages(home_url, selected_category, max_pages=300):
         ):
             results.append((url, links))
 
-        # Enqueue links that match the selected category
         for link, _ in links:
             if link not in visited and link not in queue:
                 if selected_category == "All Pages":
@@ -73,12 +71,12 @@ st.set_page_config(page_title="Internal Link Checker", layout="wide")
 st.title("🔗 Target URL Interlink Checker")
 
 st.markdown("""
-Use this tool to **find which internal pages link to a specific target URL**.
+Use this tool to **find which internal pages link to specific target URLs**.
 
 **Instructions:**
 1. Enter your website's homepage (e.g. `https://www.reset.in`)
 2. Choose which category of pages to crawl
-3. Enter the **target URL** you want to check interlinking for
+3. Enter one or more **target URLs** (separated by commas or new lines)
 """)
 
 home_url = st.text_input("🌐 Enter your homepage URL (e.g. https://www.reset.in):", "")
@@ -88,12 +86,12 @@ category_choice = st.selectbox(
     ["Blog Pages", "Blog Categories", "Product Pages", "All Pages"]
 )
 
-target_input = st.text_area("🎯 Enter the target URL (the one you want to see interlinking for):")
-target_url = target_input.strip()
+target_input = st.text_area("🎯 Enter target URLs (separate by commas or new lines):")
+target_urls = [url.strip().rstrip('/') for url in target_input.replace(',', '\n').splitlines() if url.strip()]
 
 if st.button("Check Interlinking Pages"):
-    if not home_url or not target_url:
-        st.error("❗ Please enter both the homepage and target URL.")
+    if not home_url or not target_urls:
+        st.error("❗ Please enter both the homepage and at least one target URL.")
     else:
         with st.spinner(f"🚀 Crawling up to 300 pages from {category_choice}..."):
             crawled = crawl_filtered_pages(home_url, category_choice)
@@ -101,18 +99,31 @@ if st.button("Check Interlinking Pages"):
         if not crawled:
             st.warning("😕 No matching pages found during crawl.")
         else:
-            st.success(f"✅ Crawled {len(crawled)} pages. Now checking for links to your target...")
+            st.success(f"✅ Crawled {len(crawled)} pages. Now checking for links to your targets...")
 
-            matches = []
+            matches_by_target = {target: [] for target in target_urls}
+
             for page, links in crawled:
                 for link, anchor in links:
-                    if target_url.rstrip('/') == link.rstrip('/'):
-                        matches.append((page, anchor))
+                    for target in target_urls:
+                        if target == link.rstrip('/'):
+                            matches_by_target[target].append((page, anchor))
 
-            st.markdown(f"---\n### 🔍 Interlinking Results for: `{target_url}`")
-            if matches:
-                st.success(f"🔗 Found {len(matches)} pages linking to your target.")
-                for page, anchor in matches:
-                    st.markdown(f"**From Page:** [{page}]({page})  \n**Anchor Text:** `{anchor or '(no text)'}`\n")
+            st.markdown("---\n## 🔍 Interlinking Results")
+
+            total_found = sum(len(v) for v in matches_by_target.values())
+            if total_found == 0:
+                st.info("🚫 No internal links found to the target URLs in the selected category.")
             else:
-                st.info("🚫 No internal links found to the target URL in the selected category.")
+                st.success(f"🔗 Found {total_found} total links to your targets.\n")
+
+                for target, matches in matches_by_target.items():
+                    st.markdown(f"### 🎯 Target URL: `{target}`")
+                    if matches:
+                        for page, anchor in matches:
+                            st.markdown(f"""
+**From Page:** [{page}]({page})  
+**Anchor Text:** `{anchor or '(no text)'}`  
+---""")
+                    else:
+                        st.info("No pages link to this target.")
